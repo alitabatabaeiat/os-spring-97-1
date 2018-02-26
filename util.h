@@ -1,11 +1,7 @@
 #ifndef __UTILS__
 #define __UTILS__
-// #include <sys/socket.h>
-// #include <sys/types.h>
-// #include <unistd.h>
-// #include <string.h>
 
-
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -14,6 +10,10 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-void print(char* s);
+void prints(char* s);
+void printi(int i);
+void *get_in_addr(struct sockaddr *sa);
+void itoa(int n, char s[]);
+void reverse(char s[]);
 
 #endif
