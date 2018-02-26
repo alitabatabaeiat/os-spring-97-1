@@ -15,7 +15,7 @@ util.o: util.c util.h
 server.o: server.c util.h util.o
 	$(CC) $(CFLAG) server.c
 
-client.o: client.c client.h util.h util.o
+client.o: client.c util.h util.o
 	$(CC) $(CFLAG) client.c
 clean:
 	rm *.o *.out
