@@ -5,9 +5,8 @@ DEBUG = -g
 ALL.O = util.o server.o client.o
 
 all: $(ALL.O)
-	# $(CC) main_server.c list.o DS_Struct.o utils.o server.o -o main_server.out
-	# $(CC) data_server.c list.o DS_Struct.o utils.o server.o client_connect.o -o data_server.out
-	# $(CC) client.c list.o DS_Struct.o utils.o client_connect.o -o client.out
+	$(CC) util.o server.o -o s
+	$(CC) util.o client.o -o c
 
 util.o: util.c util.h
 	$(CC) $(CFLAG) util.c
