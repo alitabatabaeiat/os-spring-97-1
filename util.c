@@ -4,6 +4,11 @@ void prints(char* s) {
   int i = write(STDOUT_FILENO, s, strlen(s));
 }
 
+void printl(char* s) {
+  prints(s);
+  prints("\n");
+}
+
 void printi(int i) {
   char buffer[100];
   itoa(i, buffer);

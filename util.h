@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 
 void prints(char* s);
+void printl(char* s);
 void printi(int i);
 void *get_in_addr(struct sockaddr *sa);
 void itoa(int n, char s[]);
