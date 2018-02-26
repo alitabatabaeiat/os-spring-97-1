@@ -5,8 +5,8 @@ DEBUG = -g
 ALL.O = util.o server.o client.o
 
 all: $(ALL.O)
-	$(CC) util.o server.o -o s
-	$(CC) util.o client.o -o c
+	$(CC) util.o server.o -o s.o
+	$(CC) util.o client.o -o c.o
 
 util.o: util.c util.h
 	$(CC) $(CFLAG) util.c
