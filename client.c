@@ -1,56 +1,66 @@
 #include "util.h"
 
-#define MAXDATASIZE 100
 
 int main(int argc, char const *argv[]) {
-  if (argc != 3) {
-    prints("ERR! ip & port number\n");
+  if (argc != 4) {
+    printl("ERR! ip & port number & server port number?");
     return 0;
   }
 
   char *ip = (char *) argv[1];
   char *port = (char *) argv[2];
+  char *serverport = (char *) argv[3];
   int socketfd, numbytes;
-  char buf[MAXDATASIZE];
   struct addrinfo hints, *servinfo, *p;
   char s[INET6_ADDRSTRLEN];
+  char buffer[CHUNK_SIZE] = {0};
 
   memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  if (getaddrinfo(ip, port, &hints, &servinfo) != 0) {
-    prints("ERR! getaddrinfo\n");
+  setHints(&hints, FALSE);
+  if (getaddrinfo(ip, serverport, &hints, &servinfo) != 0) {
+    prints("ERR! getaddrinfo ");
+    printl(serverport);
     return 0;
   }
-    // loop through all the results and connect to the first we can
-  for(p = servinfo; p != NULL; p = p->ai_next) {
-    if ((socketfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-      prints("ERR! socket\n");
-      continue;
-    }
-    if (connect(socketfd, p->ai_addr, p->ai_addrlen) == -1) {
-      close(socketfd);
-      prints("ERR! connect\n");
-      continue;
-    }
-    break;
-  }
+
+  socketfd = runClient(&p, servinfo);
   if (p == NULL) {
-    prints("ERR! failed to connect\n");
+    prints("ERR! failed to connect ");
+    printl(serverport);
     return 0;
   }
   inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
 
   prints("connecting to ");
-  prints(s + '\n');
+  printl(s);
   freeaddrinfo(servinfo); // all done with this structure
-  if ((numbytes = recv(socketfd, buf, MAXDATASIZE-1, 0)) == -1) {
-    prints("ERR! recv\n");
-    return 0;
+
+  strcat(buffer, INIT);
+  strcat(buffer, ";");
+  prints("Hi, please enter your phone number: ");
+  myread(buffer + CMD_LEN + 1, CHUNK_SIZE - CMD_LEN - 1);
+  strcat(buffer, ";");
+  strcat(buffer, port);
+  send(socketfd, buffer, CHUNK_SIZE, 0);
+
+  while (1) {
+    myread(buffer, CHUNK_SIZE);
+    removeSpaces(buffer);
+    prints(buffer);
+    printl("---");
+    if (strncmp(buffer, CALL, CMD_LEN) == 0) {
+      char *phone;
+      strcpy(phone, buffer + CMD_LEN);
+      strcpy(buffer, "call;");
+      strcat(buffer, phone);
+      send(socketfd, buffer, CHUNK_SIZE, 0);
+      recv(socketfd, buffer, CHUNK_SIZE, 0);
+      printl(buffer);
+    } else if (strcmp(buffer, EXIT) == 0) {
+      break;
+    }
   }
-  buf[numbytes] = '\0';
-  prints("server: ");
-  prints(buf);
+
   close(socketfd);
   return 0;
 }
