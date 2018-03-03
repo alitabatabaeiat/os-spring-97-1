@@ -90,7 +90,6 @@ int runServer(struct addrinfo **p, struct addrinfo *servinfo) {
 
 int runClient(struct addrinfo **p, struct addrinfo *servinfo) {
   int socketfd;
-  int yes = 1;
   for((*p) = servinfo; (*p) != NULL; (*p) = (*p)->ai_next) {
     if ((socketfd = socket((*p)->ai_family, (*p)->ai_socktype, (*p)->ai_protocol)) == -1) {
       printl("ERR! socket");
@@ -114,3 +113,117 @@ void removeSpaces(char *str) {
             str[count++] = str[i];
     str[count] = '\0';
 }
+
+void clearClient(struct Client *c) {
+  strcpy(c->ip, "\0");
+  strcpy(c->phone, "\0");
+  strcpy(c->port, "\0");
+  c->status = NOT_CONNECTED;
+}
+
+void printClients(struct Client c[]) {
+  printl("----------");
+  for (int j = 0; j < USERS; j++) {
+    if (c[j].status != NOT_CONNECTED) {
+      prints("client ");
+      printi(j + FIRST_CLIENT);
+      prints(": ");
+      if (c[j].status != INITIALIZED)
+        printl("waiting for client informations...");
+      else {
+        prints(c[j].phone);
+        prints(" - ip: ");
+        prints(c[j].ip);
+        prints(" - port: ");
+        printl(c[j].port);
+      }
+    }
+  }
+}
+
+void produceBuffer(char buffer[], char **s, int len) {
+  strcpy(buffer, s[0]);
+  for (int i = 1; i < len; i++) {
+    strcat(buffer, ";");
+    strcat(buffer, s[i]);
+  }
+}
+
+
+int sendAll(int fd, char *buf, int len) {
+  int total = 0;
+  int bytesleft = len;
+  int n;
+  while(total < len) {
+    n = send(fd, buf + total, bytesleft, 0);
+    printf("---%d\n", n);
+    if (n == -1)
+      break;
+    total += n;
+    bytesleft -= n;
+  }
+  return n == -1 ? FALSE : total;
+}
+
+int sendFile(int fd, char *path, int flags) {
+  int total = 0;
+  int bytesleft = CHUNK_SIZE;
+  int n = 1;
+  char buffer[CHUNK_SIZE], temp[CHUNK_SIZE];
+  int filefd = open(path, O_RDONLY);
+  if (filefd == -1) {
+    printl("ERR! open");
+    return FALSE;
+  }
+  while (n > 0) {
+    n = read(filefd, buffer + total, bytesleft);
+    if (n == 0 && total > 0)
+      bytesleft = 0;
+    printf("-%d\n", n);
+    if (n == -1)
+      break;
+    total += n;
+    bytesleft -= n;
+    printf("1\n");
+    if (bytesleft == 0) {
+      int x = sendAll(fd, buffer, CHUNK_SIZE);
+      printf("--%d\n", x);
+      total = 0;
+      bytesleft = CHUNK_SIZE;
+      memset(buffer, '\0', CHUNK_SIZE);
+    }
+  }
+  close(filefd);
+
+  return n == -1 ? FALSE : TRUE;
+}
+
+int savefile(char *path ,char *buffer) {
+  int total = 0;
+  int bytesleft = CHUNK_SIZE;
+  int n = 1;
+  int filefd = open(path, O_CREAT, 0777);
+  if (filefd == -1 && errno != EEXIST) {
+    printl("ERR! open");
+    return FALSE;
+  } else {
+    filefd = open(path, O_WRONLY | O_APPEND);
+  }
+  while (bytesleft > 0) {
+    n = write(filefd, buffer + total, bytesleft);
+    printf("-%d\n", n);
+    if (n == -1)
+      break;
+    total += n;
+    bytesleft -= n;
+  }
+  close(filefd);
+
+  return n == -1 ? FALSE : TRUE;
+}
+
+// void copyClient(struct Client *c1, struct Client c2) {
+//   strcpy(c1->ip, c2.ip);
+//   strcpy(c1->phone, c2.phone);
+//   strcpy(c1->port, c2.port);
+// }

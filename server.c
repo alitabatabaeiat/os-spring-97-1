@@ -1,11 +1,5 @@
 #include "util.h"
 
-struct Client {
-  int fd;
-  char phone[PHONE_LEN];
-  char port[PORT_LEN];
-};
-
 int  main(int argc, char const *argv[]) {
   if (argc != 2) {
     printl("ERR! port number?");
@@ -23,7 +17,8 @@ int  main(int argc, char const *argv[]) {
   int fdmax;
   char buffer[CHUNK_SIZE] = {0};
   struct Client clients[USERS];
-  int numOfUsers = 0;
+  for (int i = 0; i < USERS; i++)
+    clients[i].status = NOT_CONNECTED;
 
 
   FD_ZERO(&master);
@@ -69,9 +64,7 @@ int  main(int argc, char const *argv[]) {
             printl("ERR! accept");
           } else {
             FD_SET(new_fd, &master);
-            clients[numOfUsers].fd = new_fd;
-            memset(clients[numOfUsers].phone, 0, PHONE_LEN);
-            numOfUsers++;
+            clients[new_fd - FIRST_CLIENT].status = CONNECTED;
             if (new_fd > fdmax)
               fdmax = new_fd;
             prints("new connection from ");
@@ -92,60 +85,58 @@ int  main(int argc, char const *argv[]) {
             }
             else
               printl("ERR! recv");
-            close(i); // bye!
-            FD_CLR(i, &master); // remove from master set
-            for (int j = 0; j < numOfUsers; j++) {
-              if (clients[j].fd == i) {
-                if (j != numOfUsers - 1) {
-                  clients[j].fd = clients[numOfUsers - 1].fd;
-                  strcpy(clients[j].phone, clients[numOfUsers - 1].phone);
-                  strcpy(clients[j].port, clients[numOfUsers - 1].port);
-                }
-                clients[j].fd = INVALID_FD;
-                memset(clients[j].phone, 0, PHONE_LEN);
-                memset(clients[j].port, 0, PORT_LEN);
-              }
-            }
-            numOfUsers--;
+            close(i);
+            FD_CLR(i, &master);
+            clearClient(&clients[i - FIRST_CLIENT]);
           } else {
             printl(buffer);
-
             char *cmd = strtok(buffer, ";");
             if (strcmp(cmd, INIT) == 0) {
-              char *phone = strtok(NULL, ";");
-              char *port = strtok(NULL, ";");
-              for (int j = 0; j < numOfUsers; j++) {
-                if (clients[j].fd == i) {
-                  strcpy(clients[j].phone, phone);
-                  strcpy(clients[j].port, port);
-                }
-              }
-              printl("----------");
-              for (int j = 0; j < numOfUsers; j++) {
-                if (clients[j].fd != INVALID_FD) {
-                  prints("client ");
-                  printi(clients[j].fd);
-                  prints(": ");
-                  if (clients[j].phone == "\0")
-                    printl("waiting for phone number...");
-                  else {
-                    prints(clients[j].phone);
-                    prints(" - port: ");
-                    printl(clients[j].port);
-                  }
-                }
-              }
+              strcpy(clients[i - FIRST_CLIENT].phone, strtok(NULL, ";"));
+              strcpy(clients[i - FIRST_CLIENT].ip, strtok(NULL, ";"));
+              strcpy(clients[i - FIRST_CLIENT].port, strtok(NULL, ";"));
+              clients[i - FIRST_CLIENT].status = INITIALIZED;
+
+              printClients(clients);
             } else if (strcmp(cmd, CALL) == 0) {
-              char *phone = strtok(NULL, ";");
-              for (int j = 0; j < numOfUsers; j++) {
-                if (clients[j].fd != i && clients[j].fd != INVALID_FD) {
-                  if (strcmp(phone, clients[j].phone) == 0) {
-                    printl("---");
-                    printi(i);
-                    send(i, clients[j].port, PORT_LEN, 0);
+              char phone[PHONE_LEN];
+              strcpy(phone, strtok(NULL, ";"));
+              for (int j = 0; j < USERS; j++) {
+                if ((i - FIRST_CLIENT) != j && clients[j].status != NOT_CONNECTED &&
+                    strcmp(phone, clients[j].phone) == 0) {
+                  if (clients[j].status == CHATTING) {
+                    memset(buffer, '\0', CHUNK_SIZE);
+                    strcpy(buffer, "chatting");
+                    sendAll(i, buffer, CHUNK_SIZE);
+                  } else {
+                    char *s1[] = {
+                      clients[j].phone,
+                      clients[j].ip,
+                      clients[j].port
+                    };
+                    produceBuffer(buffer, s1, sizeof (s1) / sizeof (const char *));
+                    sendAll(i, buffer, CHUNK_SIZE);
+                    clients[i - FIRST_CLIENT].status = CHATTING;
+                    clients[j].status = CHATTING;
+                    memset(buffer, '\0', CHUNK_SIZE);
+                    char *s2[] = {
+                      CALLER,
+                      clients[i - FIRST_CLIENT].phone,
+                      clients[i - FIRST_CLIENT].ip,
+                      clients[i - FIRST_CLIENT].port
+                    };
+                    produceBuffer(buffer, s2, sizeof (s2) / sizeof (const char *));
+                    sendAll(j + FIRST_CLIENT, buffer, CHUNK_SIZE);
                   }
                 }
               }
+            } else if (strcmp(cmd, DISCONNECT) == 0) {
+              char phone[PHONE_LEN];
+              strcpy(phone, strtok(NULL, ";"));
+              clients[i - FIRST_CLIENT].status = INITIALIZED;
+              for (int j = 0; j < USERS; j++)
+                if (strcmp(phone, clients[j].phone) == 0)
+                  clients[j].status = INITIALIZED;
             }
             memset(buffer, '\0', CHUNK_SIZE);
           }
