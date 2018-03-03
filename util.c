@@ -156,7 +156,6 @@ int sendAll(int fd, char *buf, int len) {
   int n;
   while(total < len) {
     n = send(fd, buf + total, bytesleft, 0);
-    printf("---%d\n", n);
     if (n == -1)
       break;
     total += n;
@@ -179,15 +178,12 @@ int sendFile(int fd, char *path, int flags) {
     n = read(filefd, buffer + total, bytesleft);
     if (n == 0 && total > 0)
       bytesleft = 0;
-    printf("-%d\n", n);
     if (n == -1)
       break;
     total += n;
     bytesleft -= n;
-    printf("1\n");
     if (bytesleft == 0) {
       int x = sendAll(fd, buffer, CHUNK_SIZE);
-      printf("--%d\n", x);
       total = 0;
       bytesleft = CHUNK_SIZE;
       memset(buffer, '\0', CHUNK_SIZE);
@@ -211,7 +207,6 @@ int savefile(char *path ,char *buffer) {
   }
   while (bytesleft > 0) {
     n = write(filefd, buffer + total, bytesleft);
-    printf("-%d\n", n);
     if (n == -1)
       break;
     total += n;
