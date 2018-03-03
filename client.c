@@ -42,6 +42,7 @@ int main(int argc, char const *argv[]) {
     printl("ERR! failed to connect ");
     return 0;
   }
+  me.status = INITIALIZED;
   // inet_ntop(p->ai_family,
   //           get_in_addr((struct sockaddr *)p->ai_addr),
   //           serverS, sizeof serverS);
@@ -72,25 +73,37 @@ int main(int argc, char const *argv[]) {
   fdmax = socketfd;
 
   FD_SET(serverfd, &master);
-  if (serverfd > fdmax) {
+  if (serverfd > fdmax)
     fdmax = serverfd;
-  }
 
   FD_SET(STDIN_FILENO, &master);
-  if (STDIN_FILENO > fdmax) {
+  if (STDIN_FILENO > fdmax)
     fdmax = STDIN_FILENO;
-  }
 
-  prints("Hi, please enter your phone number: ");
-  myread(me.phone, PHONE_LEN);
-  char *s[] = {
-    INIT,
-    me.phone,
-    me.ip,
-    me.port
-  };
-  produceBuffer(buffer, s, sizeof (s) / sizeof (const char *));
-  sendAll(serverfd, buffer, CHUNK_SIZE);
+  int saved = FALSE;
+  while (saved == FALSE) {
+    prints("Hi, please enter your phone number: ");
+    myread(me.phone, PHONE_LEN);
+    char *s[] = {
+      INIT,
+      me.phone,
+      me.ip,
+      me.port
+    };
+    produceBuffer(buffer, s, sizeof (s) / sizeof (const char *));
+    sendAll(serverfd, buffer, CHUNK_SIZE);
+    int nbytes;
+    if ((nbytes = recv(serverfd, buffer, CHUNK_SIZE, 0)) < 0) {
+      printl("ERR! recv");
+      return 0;
+    } else {
+      if (strcmp(buffer, DUPLICATE) == 0) {
+        printl("-- Duplicate Number");
+      } else {
+        saved = TRUE;
+      }
+    }
+  }
 
   int done = FALSE;
   while (done == FALSE) {
@@ -110,7 +123,7 @@ int main(int argc, char const *argv[]) {
             } else {
               FD_SET(new_fd, &master);
               client.fd = new_fd;
-              client.status = CONNECTED;
+              client.status = CHATTING;
               if (new_fd > fdmax)
                 fdmax = new_fd;
             }
@@ -122,43 +135,46 @@ int main(int argc, char const *argv[]) {
             if (strncmp(buffer, CALL, strlen(CALL)) == 0) {
               char phone[PHONE_LEN];
               strcpy(phone, buffer + strlen(CALL));
-              char *s[] = {
-                CALL,
-                phone
-              };
-              produceBuffer(buffer, s, sizeof (s) / sizeof (const char *));
-              sendAll(serverfd, buffer, CHUNK_SIZE);
-              recv(serverfd, buffer, CHUNK_SIZE, 0);
-              printl(buffer);
-              if (strcmp(buffer, "chatting") == 0) {
-                prints("--server: ");
-                prints(phone);
-                printl(" is chatting with someone else!");
+              if (strcmp(phone, me.phone) == 0) {
+                printl("-- It's Your Phone Number");
               } else {
-                strcpy(client.phone, strtok(buffer, ";"));
-                strcpy(client.ip, strtok(NULL, ";"));
-                strcpy(client.port, strtok(NULL, ";"));
+                char *s[] = {
+                  CALL,
+                  phone
+                };
+                produceBuffer(buffer, s, sizeof (s) / sizeof (const char *));
+                sendAll(serverfd, buffer, CHUNK_SIZE);
+                recv(serverfd, buffer, CHUNK_SIZE, 0);
+                if (strcmp(buffer, "chatting") == 0) {
+                  prints("--server: ");
+                  prints(phone);
+                  printl(" is chatting with someone else!");
+                } else {
+                  strcpy(client.phone, strtok(buffer, ";"));
+                  strcpy(client.ip, strtok(NULL, ";"));
+                  strcpy(client.port, strtok(NULL, ";"));
 
-                memset(&hints, 0, sizeof hints);
-                setHints(&hints, FALSE);
-                if (getaddrinfo(client.ip, client.port, &hints, &servinfo) != 0) {
-                  printl("ERR! getaddrinfo");
-                  return 0;
+                  memset(&hints, 0, sizeof hints);
+                  setHints(&hints, FALSE);
+                  if (getaddrinfo(client.ip, client.port, &hints, &servinfo) != 0) {
+                    printl("ERR! getaddrinfo");
+                    return 0;
+                  }
+                  client.fd = runClient(&p, servinfo);
+                  if (p == NULL) {
+                    printl("ERR! failed to connect ");
+                    return 0;
+                  }
+
+                  prints("connecting to client ");
+                  printl(phone);
+                  freeaddrinfo(servinfo);
+
+                  FD_SET(client.fd, &master);
+                  client.status = CHATTING;
+                  if (client.fd > fdmax)
+                    fdmax = client.fd;
                 }
-                client.fd = runClient(&p, servinfo);
-                if (p == NULL) {
-                  printl("ERR! failed to connect ");
-                  return 0;
-                }
-
-                prints("connecting to client ");
-                printl(phone);
-                freeaddrinfo(servinfo);
-
-                FD_SET(client.fd, &master);
-                client.status = CHATTING;
-                if (client.fd > fdmax)
-                  fdmax = client.fd;
               }
             } else if (strcmp(buffer, EXIT) == 0) {
               done = TRUE;
@@ -175,6 +191,7 @@ int main(int argc, char const *argv[]) {
               client.fd = INVALID_FD;
               sendAll(serverfd, buffer, CHUNK_SIZE);
               sendAll(client.fd, buffer, CHUNK_SIZE);
+              printl("-- Disconnected");
             } else if (strncmp(buffer, SEND_FILE, strlen(SEND_FILE)) == 0) {
               strcpy(filename, buffer + strlen(SEND_FILE) + 1);
               char *s[] = {
@@ -189,8 +206,14 @@ int main(int argc, char const *argv[]) {
               strcat(path, "/");
               strcat(path, filename);
               int res = sendFile(client.fd, path, O_RDONLY);
-              if (res == -1) {
+              if (res == FALSE) {
                 printl("ERR! sendfile");
+              } else {
+                memset(buffer, '\0', CHUNK_SIZE);
+                strcpy(buffer, DONE);
+                sendAll(client.fd, buffer, CHUNK_SIZE);
+                printl("-- File Sent!");
+
               }
             } else {
               sendAll(client.fd, buffer, CHUNK_SIZE);
@@ -221,15 +244,15 @@ int main(int argc, char const *argv[]) {
               } else if (strcmp(cmd, SEND_FILE) == 0) {
                 strcpy(filename, strtok(NULL, ";"));
                 client.status = SENDING_FILE;
-                printl(filename);
               } else {
                 prints(client.phone);
                 prints(": ");
                 printl(buffer);
               }
             } else {
-              if (strncmp(buffer, DONE, strlen(DONE) == 0)) {
+              if (strncmp(buffer, DONE, strlen(DONE)) == 0) {
                 client.status = CHATTING;
+                printl("-- File Received & Saved!");
               } else {
                 char path[256];
                 strcpy(path, "./");
@@ -237,7 +260,6 @@ int main(int argc, char const *argv[]) {
                 int res = mkdir(path, 0777);
                 if (res == -1 && errno != EEXIST) {
                   printl("ERR! mkdir");
-
                 } else {
                   strcat(path, "/");
                   strcat(path, filename);

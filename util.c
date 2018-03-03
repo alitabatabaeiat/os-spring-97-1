@@ -122,22 +122,42 @@ void clearClient(struct Client *c) {
 }
 
 void printClients(struct Client c[]) {
-  printl("----------");
+  int found = FALSE;
+  printl("----------------------------------------------");
   for (int j = 0; j < USERS; j++) {
     if (c[j].status != NOT_CONNECTED) {
+      found = TRUE;
       prints("client ");
       printi(j + FIRST_CLIENT);
       prints(": ");
-      if (c[j].status != INITIALIZED)
+      if (c[j].status < INITIALIZED)
         printl("waiting for client informations...");
       else {
         prints(c[j].phone);
         prints(" - ip: ");
         prints(c[j].ip);
         prints(" - port: ");
-        printl(c[j].port);
+        prints(c[j].port);
+        prints(" - status: ");
+        switch (c[j].status) {
+          case NOT_CONNECTED:
+            printl("Not Connected");
+            break;
+          case CONNECTED:
+            printl("Connected");
+            break;
+          case INITIALIZED:
+            printl("Initialized");
+            break;
+          case CHATTING:
+            printl("Chatting");
+            break;
+        }
       }
     }
+  }
+  if (found == FALSE) {
+    printl("-- No Client Found");
   }
 }
 

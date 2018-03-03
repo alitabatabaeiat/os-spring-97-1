@@ -30,6 +30,7 @@
 #define CHATTING 3
 #define SENDING_FILE 4
 #define INIT "init"
+#define DUPLICATE "duplicate"
 #define CALL "call"
 #define CALLER "caller"
 #define SEND_FILE "sendfile"
