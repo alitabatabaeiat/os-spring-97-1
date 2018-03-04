@@ -237,6 +237,100 @@ int savefile(char *path ,char *buffer) {
   return n == -1 ? FALSE : TRUE;
 }
 
+int clientGetConnection(int socketfd, struct Client * c, fd_set *master) {
+  struct sockaddr_storage remoteaddr;
+  if (c->status == NOT_CONNECTED) {
+    int addrlen = sizeof remoteaddr;
+    int new_fd = accept(socketfd, (struct sockaddr *)&remoteaddr, &addrlen);
+    if (new_fd == -1) {
+      printl("ERR! accept");
+    } else {
+      FD_SET(new_fd, master);
+      c->fd = new_fd;
+      c->status = CHATTING;
+      return new_fd;
+    }
+  }
+  return -1;
+}
+
+int callSomeone(char buffer[], struct Client *c, fd_set *master, char phone[]) {
+  strcpy(c->phone, strtok(buffer, ";"));
+  strcpy(c->ip, strtok(NULL, ";"));
+  strcpy(c->port, strtok(NULL, ";"));
+
+  struct addrinfo hints, *servinfo, *p;
+  memset(&hints, 0, sizeof hints);
+  setHints(&hints, FALSE);
+  if (getaddrinfo(c->ip, c->port, &hints, &servinfo) != 0) {
+    printl("ERR! getaddrinfo");
+    return 0;
+  }
+  c->fd = runClient(&p, servinfo);
+  if (p == NULL) {
+    printl("ERR! failed to connect ");
+    return 0;
+  }
+
+  prints("connecting to client ");
+  printl(phone);
+  freeaddrinfo(servinfo);
+
+  FD_SET(c->fd, master);
+  c->status = CHATTING;
+  return c->fd;
+}
+
+void clientDisconnect(int serverfd, char buffer[], struct Client *c, fd_set *master) {
+  strcat(buffer, ";");
+  strcat(buffer, c->phone);
+  close(c->fd);
+  FD_CLR(c->fd, master);
+  clearClient(c);
+  c->fd = INVALID_FD;
+  sendAll(serverfd, buffer, CHUNK_SIZE);
+  sendAll(c->fd, buffer, CHUNK_SIZE);
+  printl("-- Disconnected");
+}
+
+void sendFileCmd(char filename[], char buffer[], int clientfd, char myphone[]) {
+  strcpy(filename, buffer + strlen(SEND_FILE) + 1);
+  char *s[] = {
+    SEND_FILE,
+    filename
+  };
+  produceBuffer(buffer, s, sizeof (s) / sizeof (const char *));
+  sendAll(clientfd, buffer, CHUNK_SIZE);
+  char path[256];
+  strcpy(path, "./");
+  strcat(path, myphone);
+  strcat(path, "/");
+  strcat(path, filename);
+  int res = sendFile(clientfd, path, O_RDONLY);
+  if (res == FALSE) {
+    printl("ERR! sendfile");
+  } else {
+    memset(buffer, '\0', CHUNK_SIZE);
+    strcpy(buffer, DONE);
+    sendAll(clientfd, buffer, CHUNK_SIZE);
+    printl("-- File Sent!");
+  }
+}
+
+void receivingFile(char filename[], char buffer[], char myphone[]) {
+  char path[256];
+  strcpy(path, "./");
+  strcat(path, myphone);
+  int res = mkdir(path, 0777);
+  if (res == -1 && errno != EEXIST) {
+    printl("ERR! mkdir");
+  } else {
+    strcat(path, "/");
+    strcat(path, filename);
+    savefile(path, buffer);
+  }
+}
+
 // void copyClient(struct Client *c1, struct Client c2) {
 //   strcpy(c1->ip, c2.ip);
 //   strcpy(c1->phone, c2.phone);

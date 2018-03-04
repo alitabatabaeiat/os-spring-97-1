@@ -17,8 +17,7 @@ int main(int argc, char const *argv[]) {
   char buffer[CHUNK_SIZE] = {0};
   char filename[CHUNK_SIZE];
 
-  int socketfd, new_fd, numbytes;
-  struct sockaddr_storage remoteaddr;
+  int socketfd, numbytes;
   fd_set master;
   fd_set read_fds;
   int fdmax;
@@ -115,19 +114,9 @@ int main(int argc, char const *argv[]) {
     for(int i = 0; i <= fdmax; i++) {
       if (FD_ISSET(i, &read_fds)) {
         if (i == socketfd) {
-          if (client.status == NOT_CONNECTED) {
-            int addrlen = sizeof remoteaddr;
-            new_fd = accept(socketfd, (struct sockaddr *)&remoteaddr, &addrlen);
-            if (new_fd == -1) {
-              printl("ERR! accept");
-            } else {
-              FD_SET(new_fd, &master);
-              client.fd = new_fd;
-              client.status = CHATTING;
-              if (new_fd > fdmax)
-                fdmax = new_fd;
-            }
-          }
+          int res =  clientGetConnection(i, &client, &master);
+          if (res > fdmax)
+            fdmax = res;
         } else if (i == STDIN_FILENO) {
           myread(buffer, CHUNK_SIZE);
           if (client.status == NOT_CONNECTED) {
@@ -150,30 +139,9 @@ int main(int argc, char const *argv[]) {
                   prints(phone);
                   printl(" is chatting with someone else!");
                 } else {
-                  strcpy(client.phone, strtok(buffer, ";"));
-                  strcpy(client.ip, strtok(NULL, ";"));
-                  strcpy(client.port, strtok(NULL, ";"));
-
-                  memset(&hints, 0, sizeof hints);
-                  setHints(&hints, FALSE);
-                  if (getaddrinfo(client.ip, client.port, &hints, &servinfo) != 0) {
-                    printl("ERR! getaddrinfo");
-                    return 0;
-                  }
-                  client.fd = runClient(&p, servinfo);
-                  if (p == NULL) {
-                    printl("ERR! failed to connect ");
-                    return 0;
-                  }
-
-                  prints("connecting to client ");
-                  printl(phone);
-                  freeaddrinfo(servinfo);
-
-                  FD_SET(client.fd, &master);
-                  client.status = CHATTING;
-                  if (client.fd > fdmax)
-                    fdmax = client.fd;
+                  int res = callSomeone(buffer, &client, &master, phone);
+                  if (res > fdmax)
+                    fdmax = res;
                 }
               }
             } else if (strcmp(buffer, EXIT) == 0) {
@@ -183,38 +151,9 @@ int main(int argc, char const *argv[]) {
             }
           } else {
             if (strcmp(buffer, DISCONNECT) == 0) {
-              strcat(buffer, ";");
-              strcat(buffer, client.phone);
-              close(client.fd);
-              FD_CLR(client.fd, &master);
-              clearClient(&client);
-              client.fd = INVALID_FD;
-              sendAll(serverfd, buffer, CHUNK_SIZE);
-              sendAll(client.fd, buffer, CHUNK_SIZE);
-              printl("-- Disconnected");
+              clientDisconnect(serverfd, buffer, &client, &master);
             } else if (strncmp(buffer, SEND_FILE, strlen(SEND_FILE)) == 0) {
-              strcpy(filename, buffer + strlen(SEND_FILE) + 1);
-              char *s[] = {
-                SEND_FILE,
-                filename
-              };
-              produceBuffer(buffer, s, sizeof (s) / sizeof (const char *));
-              sendAll(client.fd, buffer, CHUNK_SIZE);
-              char path[256];
-              strcpy(path, "./");
-              strcat(path, me.phone);
-              strcat(path, "/");
-              strcat(path, filename);
-              int res = sendFile(client.fd, path, O_RDONLY);
-              if (res == FALSE) {
-                printl("ERR! sendfile");
-              } else {
-                memset(buffer, '\0', CHUNK_SIZE);
-                strcpy(buffer, DONE);
-                sendAll(client.fd, buffer, CHUNK_SIZE);
-                printl("-- File Sent!");
-
-              }
+              sendFileCmd(filename, buffer, client.fd, me.phone);
             } else {
               sendAll(client.fd, buffer, CHUNK_SIZE);
             }
@@ -254,17 +193,7 @@ int main(int argc, char const *argv[]) {
                 client.status = CHATTING;
                 printl("-- File Received & Saved!");
               } else {
-                char path[256];
-                strcpy(path, "./");
-                strcat(path, me.phone);
-                int res = mkdir(path, 0777);
-                if (res == -1 && errno != EEXIST) {
-                  printl("ERR! mkdir");
-                } else {
-                  strcat(path, "/");
-                  strcat(path, filename);
-                  savefile(path, buffer);
-                }
+                receivingFile(filename, buffer, me.phone);
               }
             }
           }

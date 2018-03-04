@@ -34,7 +34,7 @@
 #define CALL "call"
 #define CALLER "caller"
 #define SEND_FILE "sendfile"
-#define DONE "done"
+#define DONE "##__^^&&(())!!**done##__^^&&(())!!**"
 #define DISCONNECT "disconnect"
 #define EXIT "exit"
 
@@ -64,6 +64,11 @@ void produceBuffer(char buffer[], char **s, int len);
 int sendAll(int fd, char *buf, int len);
 int sendFile(int fd, char *path, int flags);
 int savefile(char *path ,char *buffer);
+int clientGetConnection(int socketfd, struct Client * c, fd_set *master);
+int callSomeone(char buffer[], struct Client *c, fd_set *master, char phone[]);
+void clientDisconnect(int serverfd, char buffer[], struct Client *c, fd_set *master);
+void sendFileCmd(char filename[], char buffer[], int clientfd, char myphone[]);
+void receivingFile(char filename[], char buffer[], char myphone[]);
 // void copyClient(struct Client *c1, struct Client c2);
 
 #endif
